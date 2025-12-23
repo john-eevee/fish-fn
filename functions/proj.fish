@@ -1,9 +1,14 @@
 function proj --description "Open a project in the current editor"
 
-    set -l search_paths $args
 
-    if test (count $search_paths) -eq 0
-        set -l search_paths ~/Projects ~/dev ~/code ~/workspace
+    # defaults
+    set -l search_paths $HOME/projects $HOME/Projects \
+      $HOME/work $HOME/Work  $HOME/code $HOME/Code
+
+    $count_args = count $argv
+    if test $count_args -gt 0
+        log "Using custom search paths: $argv"
+        set search_paths $argv
     end
 
     # Catppuccin Mocha color palette
@@ -28,7 +33,7 @@ function proj --description "Open a project in the current editor"
     --reverse \
     --border="rounded" \
     --prompt="Go to > " \
-    --pointer="aa" \
+    --pointer=">" \
     --marker=">" \
     --height=40% \
     --color="bg+:$color02,bg:$color00,spinner:$color06,hl:$color08" \
@@ -49,16 +54,57 @@ function proj --description "Open a project in the current editor"
     end
 
     set -l result (fd --type d --hidden --glob ".git" $valid_paths --exec dirname | fzf $fzf_opts)
-
     if test $EDITOR = ""
         set EDITOR "code"  # Default to VSCode if EDITOR is not set
     end
 
     if test -n "$result"
         cd $result
-        # 'mise' is hooked into fish, so the 'cd' above automatically triggers the env switch.
+        # mise is hooked on cd
+        post_project_cd
         $EDITOR .
-        commandline -f repaint
-        echo -e "\n\033[0;32mOpened project: $result\033[0m"
+        log -l info "Opened project at $result in $EDITOR"
     end
+end
+
+
+function post_project_cd --description "Actions to perform after changing to a project directory"
+    set -l project_type (get_project_type)
+    switch $project_type
+    case node
+       on_node_callback
+    case java-maven
+        on_java_callback
+    case java-gradle
+        on_java_callback
+    case python
+        on_python_callback
+    case elixir
+        on_elixir_callback
+    case flutter
+        on_flutter_callback
+    case '*'
+       # No specific actions for unknown project types
+end
+
+
+function get_project_type --description "Determine the type of project in the current directory"
+    set -l project_type "unknown"
+    if test-f "package.json"
+        set project_type "node"
+    else if test -f "pom.xml"
+        set project_type "java-maven"
+    else if test -f "build.gradle" -o -f "build.gradle.kts"
+        set project_type "java-gradle"
+    else if test -f "setup.py" -o -f "pyproject.toml"
+        set project_type "python"
+    else if test -f "mix.exs"
+        set project_type "elixir"
+      else if test -f "pubspec.yaml"
+        set project_type "flutter"
+    else
+        set project_type "unknown"
+    end
+
+    return $project_type
 end
